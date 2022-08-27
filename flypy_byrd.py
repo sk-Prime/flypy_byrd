@@ -502,10 +502,8 @@ def run():
     game = Game(screen)
     game.create_pillars()
     clock = pygame.time.Clock()
-    time_passed = 0
-    count=-1
     while True:
-        time_passed+=clock.tick(100)
+        clock.tick(100)
         game.render_bg()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -516,12 +514,6 @@ def run():
         game.render()
         game.collision()
         pygame.display.update()
-        if time_passed > 0.6:
-            count+=1
-            rect=pygame.Rect(0,0,conf.s_width,conf.s_height)
-            area = screen.subsurface(rect).copy()
-            pygame.image.save(area,f"out/{count}.png")
-            time_passed = 0
             
 
 if __name__=="__main__":
