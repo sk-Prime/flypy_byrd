@@ -1,6 +1,11 @@
 # flypy_byrd
 flappy bird clone in pygame
 
+### dependencies
+- Python 3.8 and pygame 2
+
+flypy byrd.py does not depend on any other resource. All Artworks and sound are programatically generated. So just copy the file in any place and then execute using python. 
+
 ![demo](./demo.gif)
 
 ### To run in your device you may need to change this values
