@@ -1,5 +1,6 @@
-#pylint:disable=W0621
 import pygame
+from pygame.mixer import Sound, get_init
+from array import array
 from sys import exit as sysexit
 from random import randint
 pygame.init()
@@ -36,8 +37,8 @@ class Config():
         #each click bird will get this amount of energy
         self.bird_energy = 100
         self.bird_speed = 400 #fly up and down base speed
-        self.energy_rate = 5
-        self.speed_rate  = 10
+        self.energy_rate = 5 #rate of energy usage
+        self.speed_rate  = 10 #speed increase decr rate for speedup or slowing down
         
         self.bg_sky = (30,120,180)
         self.bg_pos = 600 #screen_height - bg_pos = cloud begin
@@ -50,7 +51,7 @@ class Config():
         self.tree_r=(50,100)
         self.tree_sp = 10
         
-        self.hr_space = 500 #space between pillar x axis
+        self.hr_space = 600 #space between pillar x axis
         self.vr_space = 200/2 #y axis space/two pillar = each pillar gap
         self.vr_variance = 50 #y space variance
         self.speed = 300 #pillar speed
@@ -61,6 +62,8 @@ class Config():
         #each time generate all artworks
         self.regenerate = True
         self.cheat = False
+        self.hold_pos = False
+        self.play_sound = True
         
     def change_res(self, width, height):
         self.s_width = width
@@ -69,6 +72,25 @@ class Config():
         self.pillar_y_pos = (self.s_height*30)//100,self.s_height-(self.s_height*30)//100
 conf = Config()
 #---------------------
+#-------sound--------
+class Note(Sound):
+    #credit: https://gist.github.com/ohsqueezy/6540433
+    def __init__(self, frequency, volume=.1):
+        self.frequency = frequency
+        Sound.__init__(self, self.build_samples())
+        self.set_volume(volume)
+
+    def build_samples(self):
+        period = int(round(get_init()[0] / self.frequency))
+        samples = array("h", [0] * period)
+        amplitude = 2 ** (abs(get_init()[1]) - 1) - 1
+        for time in range(period):
+            if time < period / 2:
+                samples[time] = amplitude
+            else:
+                samples[time] = -amplitude
+        return samples
+#-----------------
 
 #-------Artworks
 def __gradient(color1,color2,step):
@@ -247,14 +269,18 @@ class Bird():
             self.time_passed+=tick #animation speed control
             px,py = self.position
             if self.energy>10: #do flapping
-                py -= self.speed*tick
-                self.energy -= conf.energy_rate
-                if self.speed>100: #reduce speed gradually untill 100
-                    self.speed-=conf.speed_rate
+                if not conf.hold_pos:
+                    py -= self.speed*tick
+                    self.energy -= conf.energy_rate
+                    if self.speed>100: #reduce speed gradually untill 100
+                        self.speed-=conf.speed_rate
                     
                 if self.time_passed > .04 and not self.flipped:
                     #if flipped no flapping animation
-                    self.active_sprite = pygame.transform.rotate(self.sprite[self.c_frame],20)
+                    if not conf.hold_pos:
+                        self.active_sprite = pygame.transform.rotate(self.sprite[self.c_frame],20)
+                    else:
+                        self.active_sprite = self.sprite[self.c_frame]
                     self.c_frame +=1
                     if self.c_frame>2: #looping back to first frame
                         self.c_frame=0
@@ -371,62 +397,70 @@ class Game():
             self.pillars.append((bottom_p,top_p)) #pillar pair
         self.last_respawn=i
         
-    #this function contains a bug
     def pillars_update(self):
         bx,by= self.bird.position
         respawn = self.last_respawn
         for num,pillars in enumerate(self.pillars):#loop pillar pair
-            pos = randint(*conf.pillar_y_pos)
-            variance = randint(-conf.vr_variance,conf.vr_variance)
-            for i,pillar in enumerate(pillars):
-                if pillar.respawn:
-                    #print(f"num : {num}, pillar {i}")
-                    respawn=num
-                    if i==0:#bottom_pillar
-                        y_pos = pos+(conf.vr_space+variance)
-                    else:
-                        y_pos = -conf.s_height+pos-(conf.vr_space+variance)
-                    #last_respawned pillar pair, using bottom pillar to
-                    #calculate distance to respawn. so space between
-                    #last pillar and respawned pillar is same = conf.hr_space
-                    #but it does not work as expected xpos contains bug
-                    x_pos = self.pillars[self.last_respawn][0].position[0]+conf.hr_space
-                    pillar.position = x_pos,y_pos
-                    pillar.respawn = False #no need respawning
-                px,py = pillar.position
+            pos = randint(*conf.pillar_y_pos) #midpoint between two pillar space
+            variance = randint(-conf.vr_variance,conf.vr_variance) 
+            p1,p2 = pillars #p1=bottom_pillar
+            if p1.respawn:
+                #the last respawned pillar position. ensure equal space
+                x = self.pillars[self.last_respawn][0].position[0]+(conf.hr_space)
+                y = pos+conf.vr_space+variance #moving in y axis to make space
+                p1.position = x,y
+                #top pillar is in same x-axis but different y
+                y = -conf.pillar_h+pos-(conf.vr_space+variance)
+                p2.position = x,y
                 
-                #check if this pillar in collision with bird
+                p1.respawn = False #respawning done, so false
+                p2.respawn = False
+                respawn=num
+            p1.move()
+            p2.move()
+            p1.render()
+            p2.render()
+            self.last_respawn=respawn #keeping track of last respawned pillar
+            #check if this pillars are in collision with bird
+            for pillar in pillars:
+                px,py = pillar.position
                 if self.collision_detect(bx,by,px,py):
                     if not conf.cheat:
-                        self.bird_collide_with_pillar = True
-                    
-                pillar.move()
-                pillar.render()
-            self.last_respawn=respawn
-            
+                       self.bird_collide_with_pillar = True
+                       
     def collision_detect(self,bx,by,px,py):
         if px+conf.pillar_w+10<bx+conf.bird_size<px+conf.pillar_w+20 and 0<by<conf.s_height:
-            #if self.bird_collide_with_pillar:
-            if self.score_switch:
+            if self.score_switch and not self.bird_collide_with_pillar:
                 self.score+=1
+                #bird takes few loop to cross that region and increase score by 1
+                #to prevent that
                 self.score_switch = False
+                if conf.play_sound:
+                    Note(900).play(50)
         if px+conf.pillar_w+20<bx+conf.bird_size and not self.score_switch:
+            #bird crossed that region, so prepare for next pillar crossing
             self.score_switch =True
         if px<bx<px+conf.pillar_w and py<by<py+conf.pillar_h:
+            #back of bird collided with the piller
             return True
         elif px<bx+conf.bird_size<px+conf.pillar_w and py<by+conf.bird_sizey<py+conf.pillar_h:
+            #front of the bird
             return True
         
     def collision(self):
         _,py=self.bird.position
         if not 0<py:
+            #out of screen top
             self.bird_collide_with_pillar=True
         elif py> conf.s_height:
+            #outof screen bottom
             self.go_home()
         if (self.bird_collide_with_pillar and not self.bird.flipped):
+            #bird collided so died and flipped
             self.bird.flip()
             #pygame.mixer.Sound.play(self.die)
-            
+            if conf.play_sound:
+                    Note(200).play(50)
    
     def energy_gain(self):
         #bird will gain energy after each mouse click
@@ -519,8 +553,9 @@ def run():
                 sysexit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 game.listen(event.pos)
-        game.render()
+                
         game.collision()
+        game.render()
         pygame.display.update()
 
 if __name__=="__main__":
@@ -544,5 +579,8 @@ if __name__=="__main__":
         conf.tree_sp = 2
         conf.bg_h_sub = 20
         conf.vr_variance=10
+        
     conf.cheat=not True
+    conf.hold_pos=not True
+    conf.play_sound=True
     run()
