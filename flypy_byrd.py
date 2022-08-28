@@ -377,7 +377,7 @@ class Game():
         respawn = self.last_respawn
         for num,pillars in enumerate(self.pillars):#loop pillar pair
             pos = randint(*conf.pillar_y_pos)
-            variance = randint(0,conf.vr_variance)
+            variance = randint(-conf.vr_variance,conf.vr_variance)
             for i,pillar in enumerate(pillars):
                 if pillar.respawn:
                     #print(f"num : {num}, pillar {i}")
