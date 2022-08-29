@@ -1,3 +1,4 @@
+#pylint:disable=W0621
 import pygame
 from pygame.mixer import Sound, get_init
 from array import array
@@ -11,7 +12,7 @@ class Config():
         #screen_size
         self.s_width = 720
         self.s_height = 1440
-        
+        self.fps = 100
         self.pillar_w = 100 #pillar width
         self.pillar_h = self.s_height
         self.p_col_b = (0,100,20) #pillar color gradient begin
@@ -53,7 +54,7 @@ class Config():
         
         self.hr_space = 600 #space between pillar x axis
         self.vr_space = 200/2 #y axis space/two pillar = each pillar gap
-        self.vr_variance = 50 #y space variance
+        self.vr_variance = (-30,50) #y space variance
         self.speed = 300 #pillar speed
         #gap between two pillar y rand range
         self.pillar_y_pos = (self.s_height*30)//100,self.s_height-(self.s_height*30)//100
@@ -64,12 +65,24 @@ class Config():
         self.cheat = False
         self.hold_pos = False
         self.play_sound = True
-        
+        self.score_rate=1
+        self.ufo = True
+        self.ufo_interval = (20,50)
+        self.ufo_size=(20,40)
+        self.sheild_width=3
+        self.effect_duration = (10,30)
+        self.effect_radius=100
+
     def change_res(self, width, height):
         self.s_width = width
         self.s_height = height
         self.pillar_h = self.s_height
         self.pillar_y_pos = (self.s_height*30)//100,self.s_height-(self.s_height*30)//100
+    def change_fps(self,value):
+        self.fps=value
+        self.energy_rate = (150-value)*0.1
+        self.speed_rate= (200-value)*0.1
+
 conf = Config()
 #---------------------
 #-------sound--------
@@ -91,7 +104,77 @@ class Note(Sound):
                 samples[time] = -amplitude
         return samples
 #-----------------
-
+class Ufo():
+    def __init__(self,screen):
+        self.screen = screen
+        self.size=0
+        self.exist = False
+        self.speed=0
+        self.sprite=None
+        self.position = (600,100)
+        
+        self.active_sprite = self.sprite
+        self.clock = pygame.time.Clock()
+        self.anim_t = 0
+        self.create_t=0
+        self.interval = randint(*conf.ufo_interval)
+        self.effect=False
+        self.effect_d = randint(*conf.effect_duration)
+        self.effect_r=conf.effect_radius
+        self.reduction = 0
+        
+    def create(self):
+        xy = randint(*conf.ufo_size)
+        self.size=xy
+        self.position=conf.s_width+100,randint(30,conf.s_height-30)
+        surface = pygame.Surface((xy,)*2)
+        surface.set_colorkey((0))
+        pygame.draw.circle(surface,(200,200,230),(xy/2,xy/2),xy/4)
+        pygame.draw.ellipse(surface,(230,230,230),(0,xy/2,xy,xy/2))
+        self.sprite=surface
+        self.active_sprite=surface
+        self.speed=randint(100,500)
+        self.exist=True
+        self.interval=randint(*conf.ufo_interval)
+        self.effect_d = randint(*conf.effect_duration)
+        
+    def move(self,tick):
+        if self.exist:
+            self.position = self.position[0]-(self.speed*tick),self.position[1]
+            if self.position[0]<-50:
+                self.kill()
+   
+    def process(self):
+        tick = self.clock.tick()/1000
+        self.create_t+=tick
+        
+        if (self.create_t>self.interval and not self.exist):
+            self.create()
+        if self.exist:
+            self.anim_t+=tick
+            self.move(tick)
+            if self.anim_t>0.2:
+                self.anim_t=0
+                self.active_sprite = pygame.transform.rotate(self.sprite,randint(-5,5))
+            self.render()
+        if self.effect:
+            self.effect_r-= self.reduction*tick
+            if self.effect_r<10:
+                self.effect=False
+                conf.cheat=False
+                #conf.hold_pos=False
+                self.effect_r=conf.effect_radius
+                Note(500).play(100)
+            
+    def kill(self):
+        self.exist=False
+        self.create_t=0
+        self.anim_t=0
+        
+            
+    def render(self):
+        self.screen.blit(self.active_sprite,self.position)
+        
 #-------Artworks
 def __gradient(color1,color2,step):
     #large number of step = fine gradient
@@ -106,10 +189,10 @@ def __gradient(color1,color2,step):
     colors.append(color2)
     return colors
 
-def __dim(color=(120,80,90),f=30):
+def dim(color=(120,80,90),f=30):
     return [max((0,c-f)) for c in color]
     
-def __light(color=(120,80,90),f=30):
+def light(color=(120,80,90),f=30):
     return [min((255,c+f)) for c in color]
     
 def rand_col(b=0,e=255):
@@ -123,7 +206,7 @@ def create_bg():
     pygame.draw.rect(surface,conf.bg_sky,(0,0,conf.s_width,conf.s_height))
     #place cloud
     for i in range(0,w,conf.cloud_sp):
-        pygame.draw.circle(surface,__dim(conf.bg_cloud,10),(i,h-r+randint(0,100)),randint(*conf.cloud_r)/2)
+        pygame.draw.circle(surface,dim(conf.bg_cloud,10),(i,h-r+randint(0,100)),randint(*conf.cloud_r)/2)
     #next layer of cloud
     r-=conf.bg_h_sub #spacing from top layer
     for i in range(0,w,conf.cloud_sp):
@@ -131,11 +214,11 @@ def create_bg():
     #three layers of tree
     r-=(conf.bg_h_sub*2)
     for i in range(0,w,conf.tree_sp):
-        pygame.draw.circle(surface,__dim(conf.bg_tree,50),(i,h-r+randint(0,100)),randint(*conf.tree_r)/2)
+        pygame.draw.circle(surface,dim(conf.bg_tree,50),(i,h-r+randint(0,100)),randint(*conf.tree_r)/2)
         
     r-=conf.bg_h_sub
     for i in range(0,w,conf.tree_sp):
-        pygame.draw.circle(surface,__dim(conf.bg_tree,25),(i,h-r+randint(0,100)),randint(*conf.tree_r)/2)
+        pygame.draw.circle(surface,dim(conf.bg_tree,25),(i,h-r+randint(0,100)),randint(*conf.tree_r)/2)
         
     r-=conf.bg_h_sub 
     for i in range(0,w,conf.tree_sp):
@@ -216,7 +299,7 @@ def create_bird(flap=3,rotate=0):
         pygame.draw.polygon(surface,conf.wing_col,scaled_flap2)
         pygame.draw.polygon(surface,conf.b_border,scaled_flap2,width=conf.b_w)
     elif flap== 3:
-        pygame.draw.polygon(surface,__light(conf.wing_col,20),scaled_flap3)
+        pygame.draw.polygon(surface,light(conf.wing_col,20),scaled_flap3)
         pygame.draw.polygon(surface,conf.b_border,scaled_flap3,width=conf.b_w)
         pygame.draw.line(surface,(8,10,20),scaled_flap3_s[0],scaled_flap3_s[1])
         pygame.draw.line(surface,(8,10,20),scaled_flap3_s[2],scaled_flap3_s[3])
@@ -369,6 +452,7 @@ class Game():
         
         self.home_screen_asset()
         self.bird.position=self.home_bird_pos
+        self.ufo = Ufo(screen)
         #-----------
         
         #self.die=pygame.mixer.Sound("./res/die.wav")
@@ -378,7 +462,6 @@ class Game():
         conf.b_body_col = rand_col(0,255)#bird color
         conf.p_col_b=rand_col(0,170)
         conf.beak_col=rand_col(0,255)
-        
         self.bg = create_bg() 
         self.bird = Bird.create(self.screen)
         self.pillars=[] #clearing
@@ -402,7 +485,7 @@ class Game():
         respawn = self.last_respawn
         for num,pillars in enumerate(self.pillars):#loop pillar pair
             pos = randint(*conf.pillar_y_pos) #midpoint between two pillar space
-            variance = randint(-conf.vr_variance,conf.vr_variance) 
+            variance = randint(*conf.vr_variance) 
             p1,p2 = pillars #p1=bottom_pillar
             if p1.respawn:
                 #the last respawned pillar position. ensure equal space
@@ -431,7 +514,7 @@ class Game():
     def collision_detect(self,bx,by,px,py):
         if px+conf.pillar_w+10<bx+conf.bird_size<px+conf.pillar_w+20 and 0<by<conf.s_height:
             if self.score_switch and not self.bird_collide_with_pillar:
-                self.score+=1
+                self.score+=conf.score_rate
                 #bird takes few loop to cross that region and increase score by 1
                 #to prevent that
                 self.score_switch = False
@@ -448,12 +531,14 @@ class Game():
             return True
         
     def collision(self):
-        _,py=self.bird.position
+        px,py=self.bird.position
         if not 0<py:
             #out of screen top
             self.bird_collide_with_pillar=True
         elif py> conf.s_height:
             #outof screen bottom
+            if not self.bird_collide_with_pillar:
+                Note(200).play(50)
             self.go_home()
         if (self.bird_collide_with_pillar and not self.bird.flipped):
             #bird collided so died and flipped
@@ -461,7 +546,22 @@ class Game():
             #pygame.mixer.Sound.play(self.die)
             if conf.play_sound:
                     Note(200).play(50)
-   
+        if conf.ufo and not self.bird_collide_with_pillar and not self.ufo.effect:
+            ux,uy=self.ufo.position
+            usize=self.ufo.size
+            
+            ufo_col = False
+            if ux-10<px<ux+usize+10 and uy-10<py<uy+usize+10:
+                ufo_col=True
+            elif ux-10<px+conf.bird_size<ux+usize+10 and uy-10<py+conf.bird_sizey<uy+10+usize:
+                ufo_col=True
+            if ufo_col:
+                self.ufo.reduction=(conf.effect_radius)/self.ufo.effect_d
+                self.ufo.effect=True
+                conf.cheat=True
+                Note(500).play(100)
+                #conf.hold_pos=True
+                
     def energy_gain(self):
         #bird will gain energy after each mouse click
         if self.running and not self.bird_collide_with_pillar:
@@ -488,6 +588,9 @@ class Game():
                 self.running=True
                 
     def go_home(self):
+        if conf.ufo:
+            self.ufo.kill()
+            self.ufo.effect=False
         self.bird.alive=False
         self.bird.home_bird=True
         self.running=False
@@ -524,20 +627,31 @@ class Game():
             return score_text
         self.screen.blit(score_text,pos)
         
+    def ufo_process(self):
+        self.ufo.process()
+        if self.ufo.effect:
+            bx,by = self.bird.position
+            center = conf.bird_size/2
+            r= self.ufo.effect_r
+            pygame.draw.circle(self.screen,(254,255,255),(bx+center,by+center),r,width=conf.sheild_width)
+        
     def render_bg(self):
         self.screen.blit(self.bg,(0,0))
         
     def render(self):
         if self.running:
+            if conf.ufo:
+                self.ufo_process()
             self.pillars_update()
             self.bird.fly()
             self.collision()
             self.score_render(text="")
+ 
         else:
             self.bird.fly()
             self.screen.blit(self.button,self.button_pos)
             self.screen.blit(self.home_score,self.score_pos)
-    
+
     
 def run():
     screen = pygame.display.set_mode((conf.s_width,conf.s_height))
@@ -545,7 +659,7 @@ def run():
     game.create_pillars()
     clock = pygame.time.Clock()
     while True:
-        clock.tick(100)
+        clock.tick(conf.fps)
         game.render_bg()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -578,7 +692,10 @@ if __name__=="__main__":
         conf.tree_r=(25,50)
         conf.tree_sp = 2
         conf.bg_h_sub = 20
-        conf.vr_variance=10
+        conf.vr_variance=(-10,50)
+        conf.ufo_size = (10,30)
+        conf.sheild_width=1
+        conf.effect_radius=50
         
     conf.cheat=not True
     conf.hold_pos=not True
