@@ -59,6 +59,7 @@ class Config():
         #gap between two pillar y rand range
         self.pillar_y_pos = (self.s_height*30)//100,self.s_height-(self.s_height*30)//100
         
+        
         self.button_size = (150,100)
         #each time generate all artworks
         self.regenerate = True
@@ -242,6 +243,7 @@ def create_pillar(flip=False):
             
     pygame.draw.rect(surface,conf.p_border_col,(0,0,conf.pillar_w,conf.pillar_cap),width=conf.p_border_w)
     pygame.draw.rect(surface,conf.p_border_col,(width,conf.pillar_cap,conf.pillar_w-(width*2),conf.pillar_h),width=conf.p_border_w)
+    #surface=pygame.image.load("./res/fly/p.png").convert()
     if flip:
         surface=pygame.transform.flip(surface,False,True)
     return surface
@@ -282,6 +284,11 @@ def create_bird(flap=3,rotate=0):
     scaled_flap3 = scale(flap3,bsize)
     scaled_flap3_s = scale(flap3_s,bsize)
     
+    
+    #body_img=pygame.image.load("./res/fly/0.png").convert()
+#    surface.blit(body_img,(0,0))
+    
+    
     pygame.draw.polygon(surface,conf.b_body_col,scaled_body)
     pygame.draw.polygon(surface,conf.b_border,scaled_body,width=conf.b_w)
     pygame.draw.polygon(surface,(220,220,220),scaled_eye)
@@ -289,6 +296,7 @@ def create_bird(flap=3,rotate=0):
     pygame.draw.polygon(surface,(10,10,10),scaled_ball)
     pygame.draw.polygon(surface,conf.beak_col,scaled_beak)
     pygame.draw.polygon(surface,conf.b_border,scaled_beak,width=conf.b_w)
+    
     
     if flap==1:
         pygame.draw.polygon(surface,conf.wing_col,scaled_flap1)
@@ -590,7 +598,10 @@ class Game():
     def go_home(self):
         if conf.ufo:
             self.ufo.kill()
-            self.ufo.effect=False
+            if self.ufo.effect:
+                self.ufo.effect=False
+                conf.cheat=False
+            
         self.bird.alive=False
         self.bird.home_bird=True
         self.running=False
@@ -673,7 +684,7 @@ def run():
         pygame.display.update()
 
 if __name__=="__main__":
-    in_pc = True
+    in_pc =True
     if in_pc:
         width = 355
         height = 520
